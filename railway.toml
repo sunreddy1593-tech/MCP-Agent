@@ -1,0 +1,12 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+# Download fresh reviews, then run the full weekly pipeline.
+# RUN_CONFIG is injected as a Railway variable.
+startCommand = "python -m review_pulse.orchestrator download --config $RUN_CONFIG && python -m review_pulse.orchestrator run --config $RUN_CONFIG"
+# Weekly cadence. Railway cron is evaluated in UTC.
+# 03:30 UTC Monday == 09:00 IST Monday.
+cronSchedule = "30 3 * * 1"
+# Cron jobs must exit; do not auto-restart on success.
+restartPolicyType = "NEVER"

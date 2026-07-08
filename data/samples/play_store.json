@@ -1,0 +1,51 @@
+[
+  {
+    "reviewId": "gp_001",
+    "userName": "Ravi Kumar",
+    "score": 2,
+    "content": "The KYC step never completes. It keeps asking me to re-upload my ID again and again.",
+    "at": "2026-06-25"
+  },
+  {
+    "reviewId": "gp_002",
+    "userName": "Anna",
+    "score": 5,
+    "content": "Onboarding was super simple and I was up and running in minutes.",
+    "at": "2026-06-18"
+  },
+  {
+    "reviewId": "gp_003",
+    "userName": "dev_guy",
+    "score": 1,
+    "content": "Withdrawals are stuck in pending for over a week. My email is dev.guy@gmail.com, please help.",
+    "at": "2026-06-09"
+  },
+  {
+    "reviewId": "gp_004",
+    "userName": "Meera",
+    "score": 3,
+    "content": "Payments work but the confirmation screen is slow to load.",
+    "at": "2026-05-22"
+  },
+  {
+    "reviewId": "gp_005",
+    "userName": "Sam",
+    "score": 4,
+    "content": "Statements finally show a running balance, much clearer than before.",
+    "at": "2026-05-02"
+  },
+  {
+    "reviewId": "gp_006",
+    "userName": "oldtimer",
+    "score": 2,
+    "content": "This is an old review from last year and should be outside the window.",
+    "at": "2025-12-01"
+  },
+  {
+    "reviewId": "gp_007",
+    "userName": "blankuser",
+    "score": 5,
+    "content": "",
+    "at": "2026-06-11"
+  }
+]

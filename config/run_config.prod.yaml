@@ -1,0 +1,47 @@
+# Production run configuration for Railway.
+# Non-secret only: the Groq API key is injected via the GROQ_API_KEY env var.
+# Artifact directories point at the mounted Railway Volume (/data) so runs
+# persist across deploys/restarts (idempotent delivery + classification cache).
+
+product_id: "com.nextbillion.groww"
+product_name: "Groww"
+
+window:
+  # Reviews from the last N weeks (allowed range: 8-12).
+  weeks: 12
+
+themes:
+  # At most 5 themes. Data-derived for Groww (see Phase 3 in implementation-plan.md).
+  labels:
+    - charges_fees
+    - trading_products
+    - app_ux_updates
+    - customer_support
+    - withdrawals_payments
+
+sources:
+  app_store:
+    app_id: null        # App Store skipped (no id) — Play Store only
+    country: "in"
+  play_store:
+    app_id: "com.nextbillion.groww"   # Groww package name
+    lang: "en"
+    country: "in"
+  # Safety cap; the 12-week window is the real bound. Raise if you hit the cap.
+  max_reviews: 20000
+
+outputs:
+  doc_title: "Groww — Weekly Review Pulse"
+  # Leave empty to create a new Doc; set after the first Doc exists so weekly
+  # runs update the same document instead of creating duplicates.
+  doc_id: null
+  # Recipient of the Gmail draft (yourself or an alias). Draft only, never sent.
+  email_to: "you@example.com"
+
+groq:
+  model: "llama-3.3-70b-versatile"
+  temperature: 0.2
+
+# Persisted on the Railway Volume mounted at /data.
+exports_dir: "/data/exports"
+store_dir: "/data/store/runs"

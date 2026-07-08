@@ -1,0 +1,11 @@
+reviewer_name,rating,title,body,updated_at,country
+jane_d,5,Smooth onboarding,"Signing up was quick and the onboarding walkthrough was clear. Loved it!",2026-06-28,US
+mike99,2,KYC nightmare,"Identity verification kept rejecting my documents for three days. Contact me at mike99@example.com if you fix it.",2026-06-21,US
+sara_k,1,Can't withdraw,"Tried to withdraw my balance twice and it failed with an error. Very frustrating.",2026-06-15,GB
+tomh,4,Payments are fast,"Payments go through instantly now, big improvement over last month.",2026-05-30,US
+anon,3,Statements confusing,"Monthly statements are hard to read and the PDF export is broken on my iPhone.",2026-05-12,CA
+lee,5,,"Great app overall, onboarding felt effortless.",2026-04-20,AU
+priya,6,Bad rating value,"This row has an out-of-range rating that should become null.",2026-04-18,IN
+olduser,1,Ancient review,"This review is far outside the 12-week window and should be filtered out.",2026-01-05,US
+nobody,4,Missing body,,2026-06-10,US
+baddate,3,Unparseable date,"This row has a bad date and should be skipped.",not-a-date,US
