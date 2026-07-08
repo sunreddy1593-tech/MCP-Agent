@@ -10,6 +10,7 @@ the environment / .env so they are never committed.
 from __future__ import annotations
 
 import os
+import shlex
 from pathlib import Path
 
 import yaml
@@ -92,10 +93,36 @@ class OutputTargets(BaseModel):
     """Where the pulse is published and drafted."""
 
     doc_title: str = "Weekly Review Pulse"
-    # If set, an existing Doc is updated (idempotent re-runs); otherwise created.
+    # The Workspace MCP server APPENDS to an existing Doc (it cannot create one),
+    # so this must point to a Doc that already exists. A raw id or a full docs URL
+    # both work; leave null to skip Doc delivery (artifact-only fallback).
     doc_id: str | None = None
     # Recipient of the Gmail draft (yourself or an alias). Draft only, never sent.
     email_to: str | None = None
+
+
+class MCPConfig(BaseModel):
+    """Connection settings for the Google Workspace MCP server (Phase 6).
+
+    Non-secret fields may live in YAML; the endpoint URL, auth token, and stdio
+    command are overlaid from the environment by `load_config` so secrets are
+    never committed. When neither an HTTP url nor a stdio command is present the
+    delivery layer degrades to the local-artifact fallback.
+    """
+
+    # "http" (streamable HTTP) or "stdio" (spawn the server process).
+    transport: str = "http"
+    # Streamable HTTP endpoint, e.g. http://127.0.0.1:3333/mcp. From env in prod.
+    url: str | None = None
+    # Bearer token the HTTP transport requires. Secret -> env only, never dumped.
+    auth_token: str | None = Field(default=None, exclude=True)
+    # stdio transport: command + args to launch the server (e.g. node dist/index.js).
+    command: str | None = None
+    args: list[str] = Field(default_factory=list)
+    # Label used in logs / error messages.
+    server_label: str = "google-workspace"
+    # Bounded retries for transient MCP errors (RATE_LIMITED / NETWORK_ERROR).
+    max_retries: int = Field(default=3, ge=0, le=10)
 
 
 class GroqConfig(BaseModel):
@@ -117,6 +144,7 @@ class RunConfig(BaseModel):
     filters: FilterConfig = Field(default_factory=FilterConfig)
     outputs: OutputTargets = Field(default_factory=OutputTargets)
     groq: GroqConfig = Field(default_factory=GroqConfig)
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
 
     # Directories for local artifacts / source exports.
     exports_dir: str = "data/exports"
@@ -148,4 +176,23 @@ def load_config(path: str | Path) -> RunConfig:
     if env_model:
         config.groq.model = env_model
 
+    # Overlay MCP delivery connection settings from the environment (secrets and
+    # deploy-specific endpoints stay out of YAML).
+    _overlay_mcp_env(config)
+
     return config
+
+
+def _overlay_mcp_env(config: RunConfig) -> None:
+    """Apply MCP_WORKSPACE_* environment variables onto config.mcp."""
+    if (transport := os.getenv("MCP_WORKSPACE_TRANSPORT")):
+        config.mcp.transport = transport.lower()
+    if (url := os.getenv("MCP_WORKSPACE_URL")):
+        config.mcp.url = url
+    if (token := os.getenv("MCP_WORKSPACE_AUTH_TOKEN")):
+        config.mcp.auth_token = token
+    if (command := os.getenv("MCP_WORKSPACE_COMMAND")):
+        config.mcp.command = command
+    if (args := os.getenv("MCP_WORKSPACE_ARGS")):
+        # shlex.split so quoted paths with spaces survive (common on Windows).
+        config.mcp.args = shlex.split(args)

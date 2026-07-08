@@ -169,23 +169,37 @@ The binding constraint is **TPD (100K)** — a naive "send all 1.6k reviews" cla
 
 ## Phase 6 — Delivery Layer (MCP Integration)
 
-**Goal:** Publish to Google Docs and create a Gmail draft — via MCP only.
+**Goal:** Append the pulse to a Google Doc and create a Gmail draft — via MCP only, using the **MCP Google Workspace server** ([`sunreddy1593-tech/MCP-1`](https://github.com/sunreddy1593-tech/MCP-1)).
 
 **Inputs from Phase 5:** the `RenderedNote` (`doc_body` + `email_body`) and the run's `outputs` config (`doc_id`, `doc_title`, `email_to`).
 
+**Target MCP server & tool contracts (verified against the repo):** The server exposes **exactly three tools** over stdio or streamable HTTP (registered under a client id like `google-workspace`), using OAuth2 user-delegated auth with an auto-refreshed refresh token. Only these contracts may be relied on:
+
+| Tool | Input | Output |
+| --- | --- | --- |
+| `append_to_google_doc` | `document_id` (req; raw ID **or** full Docs URL), `content` (req), `add_newline_before` (default `true`) | `{ document_id, status: "appended" }` |
+| `draft_gmail` | `to: string[]` (req), `subject` (req), `body` (req), `body_type: "text"\|"html"` (default `text`), `cc?`, `bcc?`, `reply_to?` | `{ draft_id, message_id, status: "drafted" }` |
+| `send_gmail` | same as `draft_gmail` | `{ message_id, thread_id, status: "sent" }` — **must never be called** (draft-only constraint) |
+
+**Capability constraints this imposes (important):**
+- **Docs is append-only into a pre-existing Doc.** There is **no create-Doc tool** and the tool **never overwrites**. So `outputs.doc_id` must point to a Doc that already exists (created/shared manually once); the pipeline appends a new dated section each week rather than creating or replacing a Doc.
+- **No Doc URL is returned.** `append_to_google_doc` returns only `{document_id, status}`; derive the link as `https://docs.google.com/document/d/{document_id}/edit`.
+- **Native draft-only path.** `draft_gmail` creates a draft without sending, satisfying the "drafts never auto-sent" constraint; `send_gmail` is intentionally left uncalled.
+
 **Tasks**
-- **Provision the Google Docs and Gmail MCP servers** in the runtime (only `user-alphavantage` is configured today — see note below).
+- **Provision the Google Workspace MCP server** in the runtime (only `user-alphavantage` is configured today — see note below). Requires Google Cloud OAuth setup (Gmail API + Google Docs API enabled, scopes `gmail.send`, `gmail.compose`, `documents`) and a one-time `npm run auth` to mint the refresh token.
 - Call MCP tools via the `CallMcpTool` pattern; **read each tool's schema before calling** and adapt arguments to it.
-- Implement `DocsClient.publish`: create a new Doc from `doc_body`, or **update** the existing one when `outputs.doc_id` is set; return `{doc_id, doc_url}`.
-- Implement `GmailClient.create_draft`: create a **draft** to `outputs.email_to` containing the `email_body` + resolved Doc link; **never send** (no send-tool call); return `{draft_id}`.
-- Wire **idempotency**: store `doc_id`, `doc_url`, and `draft_id` in the `RunManifest` (fields already exist); re-runs of the same week update rather than duplicate.
-- **Graceful degradation (fallback):** if the Docs/Gmail MCP servers are unavailable, keep the Phase 5 rendered `note.md`/`email.txt` in the run store and log an actionable message with delivery status `pending` (so upstream work isn't lost). If Docs succeeds but Gmail fails, keep the Doc and retry only the draft.
+- Implement `DocsClient.publish`: **append** `doc_body` to the existing Doc identified by `outputs.doc_id` via `append_to_google_doc` (`add_newline_before=true` to separate weekly sections); construct and return `{doc_id, doc_url}` from the returned `document_id`. Treat a missing/invalid Doc (`DOCUMENT_NOT_FOUND`) as a configuration error surfaced to the operator.
+- Implement `GmailClient.create_draft`: call `draft_gmail` with `to=[outputs.email_to]`, the rendered subject, and `email_body` (with the resolved Doc link substituted); choose `body_type` to match the render (`text` or `html`); **never call `send_gmail`**; return `{draft_id}`.
+- Wire **idempotency:** store `doc_id`, `doc_url`, `draft_id`, and a per-week delivery marker in the `RunManifest`. Because Docs is append-only, guard re-runs of the **same week** so they don't append a duplicate section (skip or replace-in-manifest); a **new** week appends a fresh section as intended.
+- **Map structured tool errors:** handle the server's machine-readable `error.code`s — `CREDENTIALS_MISSING`/`INSUFFICIENT_SCOPE` (auth/provisioning), `DOCUMENT_NOT_FOUND` (bad `doc_id`), `RATE_LIMITED` (backoff + retry), `NETWORK_ERROR`/`GOOGLE_API_ERROR` (transient retry then degrade), `INVALID_INPUT` (fix payload).
+- **Graceful degradation (fallback):** if the Workspace MCP server is unavailable, keep the Phase 5 rendered `note.md`/`email.txt` in the run store and log an actionable message with delivery status `pending` (so upstream work isn't lost). If the Doc append succeeds but the draft fails, keep the Doc result and retry only the draft.
 
-**Deliverables:** Docs MCP client, Gmail MCP client, idempotent delivery keyed on the `RunManifest`, local-artifact fallback when MCP is absent.
+**Deliverables:** Docs MCP client (append-based) and Gmail MCP client (draft-only) targeting the Google Workspace server, idempotent delivery keyed on the `RunManifest`, structured error mapping, and local-artifact fallback when MCP is absent.
 
-**Exit criteria:** With Docs/Gmail MCP present, a run creates/updates a real Doc and a real Gmail draft, and re-running the same week updates the same artifacts; without MCP, the rendered note is persisted locally and delivery status is reported clearly.
+**Exit criteria:** With the Workspace MCP present, a run **appends** the pulse to the configured Doc and creates a real Gmail **draft** (never a sent email); re-running the same week does not duplicate the Doc section or draft; without MCP, the rendered note is persisted locally and delivery status is reported clearly.
 
-**Environment note:** This runtime currently exposes only the `user-alphavantage` MCP server. The **Google Docs and Gmail MCP servers must be provisioned** before Phase 6 can deliver; until then the fallback path persists the pulse locally. Stages 1–5 are unaffected.
+**Environment note:** This runtime currently exposes only the `user-alphavantage` MCP server. The **Google Workspace MCP server ([`sunreddy1593-tech/MCP-1`](https://github.com/sunreddy1593-tech/MCP-1)) must be provisioned** (built, OAuth-authorized, and registered as an MCP server) before Phase 6 can deliver; until then the fallback path persists the pulse locally. Note also that a target Google Doc must be created and its ID placed in `outputs.doc_id`, since the server appends to an existing Doc and cannot create one. Stages 1–5 are unaffected.
 
 ---
 

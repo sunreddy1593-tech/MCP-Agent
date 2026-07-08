@@ -32,10 +32,20 @@ sources:
 
 outputs:
   doc_title: "Groww — Weekly Review Pulse"
-  # Leave doc_id empty to create a new Doc; set it to update the same Doc weekly.
+  # The Workspace MCP server APPENDS to an existing Doc (it cannot create one).
+  # Create a Doc once, then set its id (or full URL) here so each week appends a
+  # new dated section. Leave null to skip Doc delivery (artifact-only fallback).
   doc_id: null
   # Recipient of the Gmail draft (yourself or an alias). Draft only, never sent.
   email_to: "me@example.com"
+
+# Google Workspace MCP server connection (Phase 6). Non-secret only; the URL,
+# auth token, and stdio command are supplied via env (MCP_WORKSPACE_*). Leaving
+# this out runs stages 1-5 and keeps the pulse locally (status "pending").
+mcp:
+  transport: "http"          # "http" (streamable HTTP) or "stdio"
+  server_label: "google-workspace"
+  max_retries: 3
 
 groq:
   model: "llama-3.3-70b-versatile"

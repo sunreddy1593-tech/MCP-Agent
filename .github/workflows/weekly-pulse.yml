@@ -1,0 +1,55 @@
+name: Weekly Review Pulse
+
+# Weekly cadence for the pulse (portable alternative to the Railway cron in
+# railway.toml). Runs download -> full pipeline, then uploads the run artifacts.
+# Configure repository secrets before enabling:
+#   GROQ_API_KEY               (required for LLM theming/summarization)
+#   MCP_WORKSPACE_URL          (optional; enables real Docs/Gmail delivery)
+#   MCP_WORKSPACE_AUTH_TOKEN   (optional; bearer token for the MCP server)
+# Without the MCP secrets the run still succeeds and keeps artifacts locally
+# with delivery status "pending".
+
+on:
+  schedule:
+    # 03:30 UTC every Monday == 09:00 IST Monday (matches railway.toml).
+    - cron: "30 3 * * 1"
+  workflow_dispatch: {}
+
+concurrency:
+  group: weekly-pulse
+  cancel-in-progress: false
+
+jobs:
+  pulse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUN_CONFIG: config/run_config.example.yaml
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      MCP_WORKSPACE_TRANSPORT: http
+      MCP_WORKSPACE_URL: ${{ secrets.MCP_WORKSPACE_URL }}
+      MCP_WORKSPACE_AUTH_TOKEN: ${{ secrets.MCP_WORKSPACE_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download reviews
+        run: python -m review_pulse.orchestrator download --config "$RUN_CONFIG"
+
+      - name: Run weekly pulse
+        run: python -m review_pulse.orchestrator run --config "$RUN_CONFIG"
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulse-artifacts
+          path: store/runs/
+          if-no-files-found: warn
